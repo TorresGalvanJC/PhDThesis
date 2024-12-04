@@ -1,0 +1,53 @@
+    trainingImages = imageDatastore(TrainingFolder, ...
+        'IncludeSubfolders',true,...
+        'FileExtensions','.tif','LabelSource','foldernames');
+    
+    trainingImages.ReadFcn = @(loc)imresize(imread(loc),[224, 224]);
+    
+    validationImages = imageDatastore(ValidationFolder, ...
+        'IncludeSubfolders',true,...
+        'FileExtensions','.tif','LabelSource','foldernames');
+    
+    validationImages.ReadFcn = @(loc)imresize(imread(loc),[224, 224]);
+    
+    
+    % Load the pretrained GoogleNet network
+    
+    net = resnet101;
+    net.Layers;
+    
+    % Extract the layer graph from the trained network and plot the layer graph.
+    
+    lgraph = layerGraph(net);
+    Architecture_1 = figure('Units','normalized','Position',[0.1 0.1 0.8 0.8]);
+    plot(lgraph);
+    
+       
+    lgraph = removeLayers(lgraph, {'fc1000', 'prob', 'ClassificationLayer_predictions'});
+    
+    numClasses = numel(categories(trainingImages.Labels));
+    newLayers = [
+        fullyConnectedLayer(numClasses,'Name','fc','WeightLearnRateFactor',10,'BiasLearnRateFactor', 20)
+        softmaxLayer('Name','softmax')
+        classificationLayer('Name','classoutput')];
+    lgraph = addLayers(lgraph,newLayers);
+    
+    lgraph = connectLayers(lgraph,'pool5','fc');
+    
+    Architecture_2 = figure('Units','normalized','Position',[0.3 0.3 0.4 0.4]);
+    plot(lgraph);
+    ylim([0,10]);
+    
+    miniBatchSize = 10;
+    
+    options = trainingOptions('sgdm',...
+        'ExecutionEnvironment','gpu',...
+        'MiniBatchSize',miniBatchSize,...
+        'MaxEpochs',100,...
+        'InitialLearnRate',1e-5,...
+        'VerboseFrequency',1,...
+        'Plots','training-progress',...
+        'ValidationData',validationImages,...
+        'ValidationFrequency',5);
+    netTransfer = trainNetwork(trainingImages,lgraph,options);
+    
